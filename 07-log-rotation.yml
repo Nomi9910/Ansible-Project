@@ -1,0 +1,50 @@
+---
+- name: Log Rotation Configuration
+  hosts: all
+  become: yes
+  tasks:
+    - name: Install logrotate
+      package:
+        name: logrotate
+        state: present
+    - name: Configure global logrotate settings
+      copy:
+        dest: /etc/logrotate.conf
+        content: |
+          weekly
+          rotate 4
+          create
+          compress
+          delaycompress
+          includedir /etc/logrotate.d
+    - name: Configure logrotate for syslog
+      copy:
+        dest: /etc/logrotate.d/syslog
+        content: |
+          /var/log/messages
+          /var/log/secure
+          /var/log/maillog
+          /var/log/cron {
+              missingok
+              sharedscripts
+              postrotate
+                  /bin/kill -HUP `cat /var/run/syslogd.pid 2>/dev/null` 2>/dev/null || true
+              endscript
+          }
+    - name: Configure logrotate for app logs
+      copy:
+        dest: /etc/logrotate.d/app
+        content: |
+          /var/log/app/*.log {
+              daily
+              rotate 7
+              compress
+              delaycompress
+              missingok
+              notifempty
+              create 0644 root root
+          }
+    - name: Test logrotate configuration
+      command: logrotate --debug /etc/logrotate.conf
+      register: logrotate_test
+      changed_when: false
