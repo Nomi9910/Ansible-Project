@@ -1,0 +1,32 @@
+---
+- name: User Management
+  hosts: all
+  become: yes
+  vars:
+    users:
+      - name: sysadmin
+        groups: wheel
+        shell: /bin/bash
+        comment: System Administrator
+      - name: deploy
+        groups: docker
+        shell: /bin/bash
+        comment: Deploy User
+  tasks:
+    - name: Create users
+      user:
+        name: "{{ item.name }}"
+        groups: "{{ item.groups }}"
+        shell: "{{ item.shell }}"
+        comment: "{{ item.comment }}"
+        create_home: yes
+        state: present
+      loop: "{{ users }}"
+    - name: Ensure sudo access for wheel group (RHEL)
+      lineinfile:
+        path: /etc/sudoers
+        state: present
+        regexp: '^%wheel'
+        line: '%wheel ALL=(ALL) NOPASSWD: ALL'
+        validate: 'visudo -cf %s'
+      when: ansible_os_family == 'RedHat'
