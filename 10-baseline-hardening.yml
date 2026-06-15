@@ -1,0 +1,79 @@
+---
+- name: CIS Baseline Hardening
+  hosts: all
+  become: yes
+  tasks:
+    - name: Disable unused filesystems
+      copy:
+        dest: /etc/modprobe.d/disable-filesystems.conf
+        content: |
+          install cramfs /bin/true
+          install freevxfs /bin/true
+          install jffs2 /bin/true
+          install hfs /bin/true
+          install hfsplus /bin/true
+          install squashfs /bin/true
+          install udf /bin/true
+    - name: Set hard limits on core dumps
+      lineinfile:
+        path: /etc/security/limits.conf
+        line: '* hard core 0'
+        state: present
+    - name: Disable core dumps via sysctl
+      sysctl:
+        name: fs.suid_dumpable
+        value: '0'
+        state: present
+        reload: yes
+    - name: Enable ASLR
+      sysctl:
+        name: kernel.randomize_va_space
+        value: '2'
+        state: present
+        reload: yes
+    - name: Disable IP forwarding
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: '0'
+        state: present
+        reload: yes
+    - name: Disable source routing
+      sysctl:
+        name: net.ipv4.conf.all.accept_source_route
+        value: '0'
+        state: present
+        reload: yes
+    - name: Enable TCP SYN cookies
+      sysctl:
+        name: net.ipv4.tcp_syncookies
+        value: '1'
+        state: present
+        reload: yes
+    - name: Disable ICMP redirects
+      sysctl:
+        name: net.ipv4.conf.all.accept_redirects
+        value: '0'
+        state: present
+        reload: yes
+    - name: Ensure auditd is installed
+      package:
+        name: audit
+        state: present
+    - name: Start and enable auditd
+      service:
+        name: auditd
+        state: started
+        enabled: yes
+    - name: Set login banner
+      copy:
+        dest: /etc/issue
+        content: |
+          ***************************************************************************
+          *  AUTHORIZED ACCESS ONLY - All activity is monitored and logged.         *
+          *  Unauthorized access is strictly prohibited and will be prosecuted.     *
+          ***************************************************************************
+    - name: Set remote login banner
+      copy:
+        dest: /etc/issue.net
+        src: /etc/issue
+        remote_src: yes
