@@ -1,0 +1,39 @@
+---
+- name: Disk Monitoring
+  hosts: all
+  become: yes
+  vars:
+    disk_threshold: 80
+    alert_email: admin@example.com
+  tasks:
+    - name: Install mailutils (Debian/Ubuntu)
+      apt:
+        name: mailutils
+        state: present
+      when: ansible_os_family == 'Debian'
+    - name: Install mailx (RHEL/CentOS)
+      yum:
+        name: mailx
+        state: present
+      when: ansible_os_family == 'RedHat'
+    - name: Deploy disk monitoring script
+      copy:
+        dest: /usr/local/bin/disk-monitor.sh
+        mode: '0755'
+        content: |
+          #!/bin/bash
+          THRESHOLD={{ disk_threshold }}
+          EMAIL={{ alert_email }}
+          df -H | grep -vE '^Filesystem|tmpfs|cdrom' | awk '{ print $5 " " $1 }' | while read output; do
+            usage=$(echo $output | awk '{ print $1}' | cut -d'%' -f1)
+            partition=$(echo $output | awk '{ print $2 }')
+            if [ $usage -ge $THRESHOLD ]; then
+              echo "ALERT: Partition $partition on $(hostname) is ${usage}% full" | mail -s "Disk Alert: $(hostname)" $EMAIL
+            fi
+          done
+    - name: Schedule disk monitoring via cron
+      cron:
+        name: Disk Usage Monitor
+        minute: '0'
+        hour: '*/6'
+        job: /usr/local/bin/disk-monitor.sh
