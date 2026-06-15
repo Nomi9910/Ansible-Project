@@ -1,0 +1,51 @@
+---
+- name: Firewall Setup
+  hosts: all
+  become: yes
+  tasks:
+    - name: Install firewalld (RHEL/CentOS)
+      yum:
+        name: firewalld
+        state: present
+      when: ansible_os_family == 'RedHat'
+    - name: Install ufw (Debian/Ubuntu)
+      apt:
+        name: ufw
+        state: present
+      when: ansible_os_family == 'Debian'
+    - name: Start and enable firewalld (RHEL/CentOS)
+      service:
+        name: firewalld
+        state: started
+        enabled: yes
+      when: ansible_os_family == 'RedHat'
+    - name: Allow SSH through firewalld
+      firewalld:
+        service: ssh
+        permanent: yes
+        state: enabled
+      when: ansible_os_family == 'RedHat'
+    - name: Allow HTTP through firewalld
+      firewalld:
+        service: http
+        permanent: yes
+        state: enabled
+      when: ansible_os_family == 'RedHat'
+    - name: Allow HTTPS through firewalld
+      firewalld:
+        service: https
+        permanent: yes
+        state: enabled
+      when: ansible_os_family == 'RedHat'
+    - name: Reload firewalld
+      command: firewall-cmd --reload
+      when: ansible_os_family == 'RedHat'
+    - name: Enable ufw and allow SSH (Debian/Ubuntu)
+      ufw:
+        rule: allow
+        name: OpenSSH
+      when: ansible_os_family == 'Debian'
+    - name: Enable ufw (Debian/Ubuntu)
+      ufw:
+        state: enabled
+      when: ansible_os_family == 'Debian'
