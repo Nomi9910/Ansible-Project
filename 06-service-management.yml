@@ -1,0 +1,33 @@
+---
+- name: Service Management
+  hosts: all
+  become: yes
+  vars:
+    services_to_enable:
+      - chronyd
+      - rsyslog
+    services_to_disable:
+      - bluetooth
+      - cups
+  tasks:
+    - name: Ensure required services are started and enabled
+      service:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      loop: "{{ services_to_enable }}"
+      ignore_errors: yes
+    - name: Ensure unnecessary services are stopped and disabled
+      service:
+        name: "{{ item }}"
+        state: stopped
+        enabled: no
+      loop: "{{ services_to_disable }}"
+      ignore_errors: yes
+    - name: List all enabled services
+      command: systemctl list-unit-files --state=enabled
+      register: enabled_services
+      changed_when: false
+    - name: Show enabled services
+      debug:
+        var: enabled_services.stdout_lines
