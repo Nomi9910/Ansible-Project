@@ -1,0 +1,126 @@
+---
+- name: Full System Update with Conditional Reboot
+  hosts: all
+  become: yes
+  vars:
+    reboot_timeout: 300
+    reboot_msg: "System is rebooting after successful package update - initiated by Ansible"
+
+  tasks:
+
+    # ─── RHEL / CentOS / Rocky / AlmaLinux ───────────────────────────────────
+
+    - name: "[RHEL] Update all packages"
+      yum:
+        name: '*'
+        state: latest
+        update_cache: yes
+      when: ansible_os_family == 'RedHat'
+      register: rhel_update
+
+    - name: "[RHEL] Clean up orphaned packages"
+      command: yum autoremove -y
+      when: ansible_os_family == 'RedHat'
+      changed_when: false
+
+    # ─── Debian / Ubuntu ─────────────────────────────────────────────────────
+
+    - name: "[Debian] Update apt cache"
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_os_family == 'Debian'
+
+    - name: "[Debian] Upgrade all packages (dist-upgrade)"
+      apt:
+        upgrade: dist
+      when: ansible_os_family == 'Debian'
+      register: debian_update
+
+    - name: "[Debian] Remove orphaned packages"
+      apt:
+        autoremove: yes
+        purge: yes
+      when: ansible_os_family == 'Debian'
+
+    - name: "[Debian] Clean apt cache"
+      apt:
+        autoclean: yes
+      when: ansible_os_family == 'Debian'
+
+    # ─── Determine if reboot is needed ───────────────────────────────────────
+
+    - name: "[RHEL] Check if reboot is required (needs-restarting)"
+      command: needs-restarting -r
+      register: rhel_reboot_check
+      failed_when: false
+      changed_when: false
+      when: ansible_os_family == 'RedHat'
+
+    - name: "[Debian] Check if reboot is required (/var/run/reboot-required)"
+      stat:
+        path: /var/run/reboot-required
+      register: debian_reboot_check
+      when: ansible_os_family == 'Debian'
+
+    - name: Set reboot_required fact (RHEL)
+      set_fact:
+        reboot_required: "{{ rhel_reboot_check.rc == 1 }}"
+      when: ansible_os_family == 'RedHat'
+
+    - name: Set reboot_required fact (Debian)
+      set_fact:
+        reboot_required: "{{ debian_reboot_check.stat.exists }}"
+      when: ansible_os_family == 'Debian'
+
+    # ─── Print update summary ─────────────────────────────────────────────────
+
+    - name: Show update summary (RHEL)
+      debug:
+        msg: >
+          Update status: {{ 'Changes made' if rhel_update.changed else 'Already up to date' }}.
+          Reboot required: {{ reboot_required }}.
+      when: ansible_os_family == 'RedHat'
+
+    - name: Show update summary (Debian)
+      debug:
+        msg: >
+          Update status: {{ 'Changes made' if debian_update.changed else 'Already up to date' }}.
+          Reboot required: {{ reboot_required }}.
+      when: ansible_os_family == 'Debian'
+
+    # ─── Reboot if update was successful and reboot is required ──────────────
+
+    - name: Reboot servers if update succeeded and reboot is required
+      reboot:
+        msg: "{{ reboot_msg }}"
+        reboot_timeout: "{{ reboot_timeout }}"
+        pre_reboot_delay: 10
+        post_reboot_delay: 30
+        test_command: uptime
+      when: >
+        reboot_required | bool and
+        (
+          (ansible_os_family == 'RedHat' and rhel_update is not failed) or
+          (ansible_os_family == 'Debian' and debian_update is not failed)
+        )
+
+    # ─── Post-reboot verification ─────────────────────────────────────────────
+
+    - name: Verify server is back online and capture uptime
+      command: uptime
+      register: server_uptime
+      changed_when: false
+
+    - name: Show post-reboot uptime
+      debug:
+        msg: "Server {{ inventory_hostname }} is online. Uptime: {{ server_uptime.stdout }}"
+
+    - name: Capture running kernel version
+      command: uname -r
+      register: kernel_version
+      changed_when: false
+
+    - name: Show kernel version
+      debug:
+        msg: "Running kernel on {{ inventory_hostname }}: {{ kernel_version.stdout }}"
