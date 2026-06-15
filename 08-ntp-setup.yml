@@ -1,0 +1,38 @@
+---
+- name: NTP Setup with Chrony
+  hosts: all
+  become: yes
+  vars:
+    ntp_servers:
+      - 0.pool.ntp.org
+      - 1.pool.ntp.org
+      - 2.pool.ntp.org
+      - 3.pool.ntp.org
+  tasks:
+    - name: Install chrony (RHEL/CentOS)
+      yum:
+        name: chrony
+        state: present
+      when: ansible_os_family == 'RedHat'
+    - name: Install chrony (Debian/Ubuntu)
+      apt:
+        name: chrony
+        state: present
+        update_cache: yes
+      when: ansible_os_family == 'Debian'
+    - name: Configure chrony NTP servers
+      template:
+        dest: /etc/chrony.conf
+        src: chrony.conf.j2
+    - name: Start and enable chronyd
+      service:
+        name: chronyd
+        state: restarted
+        enabled: yes
+    - name: Check time sync status
+      command: chronyc tracking
+      register: chrony_status
+      changed_when: false
+    - name: Display sync status
+      debug:
+        var: chrony_status.stdout_lines
